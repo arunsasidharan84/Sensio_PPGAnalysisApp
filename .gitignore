@@ -49,3 +49,4 @@ dist/
 rust/target/
 ios/Frameworks/
 macos/Frameworks/
+android/app/src/main/jniLibs/
