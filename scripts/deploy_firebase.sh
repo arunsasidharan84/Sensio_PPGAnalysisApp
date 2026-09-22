@@ -4,9 +4,9 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-FIREBASE_PROJECT="${1:-"neuroyukti"}"
-NOTES="${2:-"Sensio PPG Analysis Studio Release: Interactive Gapless Analysis Window, 28-feature clinical dictionary, and research-grade CSV exports."}"
-APP_ID="${FIREBASE_APP_ID:-"1:883026449955:android:4a64a52bebdc63424f4396"}"
+FIREBASE_PROJECT="${1:-"ccs-ppg-studio"}"
+NOTES="${2:-"CCS PPGStudio Release: Interactive Gapless Analysis Window, 28-feature clinical dictionary, and research-grade CSV exports."}"
+APP_ID="${FIREBASE_APP_ID:-"1:625498974111:android:fed65512ede01911c47faa"}"
 
 echo "=================================================="
 echo "🔥 Deploying to Firebase App Distribution"
