@@ -8,7 +8,7 @@
 PRODUCT_NAME = sensio_ppg_app
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.sensio.sensioPpgApp
+PRODUCT_BUNDLE_IDENTIFIER = com.ccs.ccsPpgApp
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.sensio. All rights reserved.
