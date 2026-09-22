@@ -6,7 +6,6 @@ import '../../core/utils/time_formatter.dart';
 
 enum CsvViewMode {
   timeSeries,
-  summary,
   rawCsv,
 }
 
@@ -32,13 +31,11 @@ class _CsvExplorerWidgetState extends State<CsvExplorerWidget> {
   bool _isExporting = false;
 
   late String _cachedTimeSeriesCsv;
-  late String _cachedSummaryCsv;
 
   @override
   void initState() {
     super.initState();
     _cachedTimeSeriesCsv = CsvExportService.generateTimeSeriesCsv(widget.result);
-    _cachedSummaryCsv = CsvExportService.generateSummaryCsv(widget.result);
   }
 
   @override
@@ -46,7 +43,6 @@ class _CsvExplorerWidgetState extends State<CsvExplorerWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.result != widget.result) {
       _cachedTimeSeriesCsv = CsvExportService.generateTimeSeriesCsv(widget.result);
-      _cachedSummaryCsv = CsvExportService.generateSummaryCsv(widget.result);
       _currentPage = 0;
     }
   }
@@ -54,16 +50,13 @@ class _CsvExplorerWidgetState extends State<CsvExplorerWidget> {
   Future<void> _exportCurrentCsv() async {
     setState(() => _isExporting = true);
     try {
-      final isTimeSeries = _viewMode == CsvViewMode.timeSeries || _viewMode == CsvViewMode.rawCsv;
-      final csvContent = isTimeSeries ? _cachedTimeSeriesCsv : _cachedSummaryCsv;
+      final csvContent = _cachedTimeSeriesCsv;
 
       final baseName = widget.sourceFilePath != null
           ? widget.sourceFilePath!.split('/').last.replaceAll('_ppg_data.csv', '')
           : 'sensio_session';
 
-      final defaultFileName = isTimeSeries
-          ? '${baseName}_hrv_timeseries.csv'
-          : '${baseName}_hrv_summary.csv';
+      final defaultFileName = '${baseName}_hrv_timeseries.csv';
 
       final fallbackDir = widget.sourceFilePath?.substring(0, widget.sourceFilePath!.lastIndexOf('/'));
 
@@ -103,9 +96,7 @@ class _CsvExplorerWidgetState extends State<CsvExplorerWidget> {
   }
 
   Future<void> _copyCurrentCsv() async {
-    final isTimeSeries = _viewMode == CsvViewMode.timeSeries || _viewMode == CsvViewMode.rawCsv;
-    final csvContent = isTimeSeries ? _cachedTimeSeriesCsv : _cachedSummaryCsv;
-    await CsvExportService.copyToClipboard(csvContent);
+    await CsvExportService.copyToClipboard(_cachedTimeSeriesCsv);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -142,17 +133,12 @@ class _CsvExplorerWidgetState extends State<CsvExplorerWidget> {
                   ButtonSegment(
                     value: CsvViewMode.timeSeries,
                     icon: Icon(Icons.timeline, size: 16),
-                    label: Text('Time-Series Grid', style: TextStyle(fontSize: 11)),
-                  ),
-                  ButtonSegment(
-                    value: CsvViewMode.summary,
-                    icon: Icon(Icons.table_chart, size: 16),
-                    label: Text('Summary Stats', style: TextStyle(fontSize: 11)),
+                    label: Text('Time-Series Data Grid', style: TextStyle(fontSize: 11)),
                   ),
                   ButtonSegment(
                     value: CsvViewMode.rawCsv,
                     icon: Icon(Icons.code, size: 16),
-                    label: Text('Raw CSV', style: TextStyle(fontSize: 11)),
+                    label: Text('Raw CSV Stream', style: TextStyle(fontSize: 11)),
                   ),
                 ],
                 selected: {_viewMode},
@@ -284,8 +270,6 @@ class _CsvExplorerWidgetState extends State<CsvExplorerWidget> {
     switch (_viewMode) {
       case CsvViewMode.timeSeries:
         return _buildTimeSeriesGrid();
-      case CsvViewMode.summary:
-        return _buildSummaryGrid();
       case CsvViewMode.rawCsv:
         return _buildRawCsvView();
     }
@@ -414,90 +398,8 @@ class _CsvExplorerWidgetState extends State<CsvExplorerWidget> {
     );
   }
 
-  Widget _buildSummaryGrid() {
-    final rows = widget.result.summary;
-    final filtered = _searchQuery.isEmpty
-        ? rows
-        : rows.where((r) {
-            final q = _searchQuery.toLowerCase();
-            return r.metric.toLowerCase().contains(q) || r.domain.toLowerCase().contains(q);
-          }).toList();
-
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: const Color(0xFF141E33),
-          child: Row(
-            children: [
-              Text(
-                '${filtered.length} features computed',
-                style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              const Text(
-                'Parity: Complete agreement with Python reference pipeline',
-                style: TextStyle(fontSize: 11, color: SensioTheme.goodPulse),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columnSpacing: 24,
-                horizontalMargin: 16,
-                headingRowColor: WidgetStateProperty.all(const Color(0xFF0F172A)),
-                columns: const [
-                  DataColumn(label: Text('DOMAIN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('METRIC', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('MEAN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('SD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('MEDIAN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('IQR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('MIN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('MAX', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                  DataColumn(label: Text('VALID COUNT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white60))),
-                ],
-                rows: filtered.map((r) {
-                  Color domainColor = Colors.white70;
-                  if (r.domain == 'Time') domainColor = SensioTheme.accent;
-                  if (r.domain == 'Frequency') domainColor = SensioTheme.ppgSignal;
-                  if (r.domain == 'Non-Linear') domainColor = const Color(0xFFFBBF24);
-                  if (r.domain == 'Morphology') domainColor = const Color(0xFFF472B6);
-                  if (r.domain == 'Vitals & Activity') domainColor = const Color(0xFF38BDF8);
-
-                  final isTemp = r.metric == 'Skin_Temperature';
-                  final unit = isTemp ? ' °C' : '';
-
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(r.domain, style: TextStyle(color: domainColor, fontWeight: FontWeight.w600, fontSize: 11))),
-                      DataCell(Text(r.metric, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white))),
-                      DataCell(Text('${r.mean.isFinite ? r.mean.toStringAsFixed(3) : '-'}$unit', style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
-                      DataCell(Text('${r.sd.isFinite ? r.sd.toStringAsFixed(3) : '-'}$unit', style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
-                      DataCell(Text('${r.median.isFinite ? r.median.toStringAsFixed(3) : '-'}$unit', style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: SensioTheme.accent))),
-                      DataCell(Text('${r.iqr.isFinite ? r.iqr.toStringAsFixed(3) : '-'}$unit', style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
-                      DataCell(Text('${r.minVal.isFinite ? r.minVal.toStringAsFixed(3) : '-'}$unit', style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
-                      DataCell(Text('${r.maxVal.isFinite ? r.maxVal.toStringAsFixed(3) : '-'}$unit', style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
-                      DataCell(Text('${r.count}', style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.white60))),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildRawCsvView() {
-    final isTimeSeries = _viewMode == CsvViewMode.rawCsv;
-    final csvText = isTimeSeries ? _cachedTimeSeriesCsv : _cachedSummaryCsv;
+    final csvText = _cachedTimeSeriesCsv;
     final lineCount = '\n'.allMatches(csvText).length;
 
     return Column(

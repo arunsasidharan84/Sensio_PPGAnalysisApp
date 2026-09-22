@@ -12,6 +12,7 @@ import '../widgets/hrv_trends_chart.dart';
 import '../widgets/summary_table.dart';
 import '../widgets/csv_explorer_widget.dart';
 import '../../core/services/csv_export_service.dart';
+import '../../core/services/window_analysis_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -32,6 +33,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   double _currentStartS = 0.0;
   double _windowDurationS = 30.0; // 30s default zoom
   bool _showClockTime = false; // Toggle between elapsed time and clock time
+
+  // Sub-window analysis state
+  double? _analysisWindowStartS;
+  double? _analysisWindowEndS;
+  FilteredWindowStats? _windowStats;
 
   @override
   void initState() {
@@ -203,6 +209,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _analysisResult = result;
         _isAnalyzing = false;
         _currentStartS = 0.0;
+        _analysisWindowStartS = 0.0;
+        _analysisWindowEndS = result.totalDurationS;
+        _windowStats = null;
       });
     } catch (e) {
       setState(() {
@@ -210,6 +219,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _isAnalyzing = false;
       });
     }
+  }
+
+  void _onAnalysisWindowChanged(double startS, double endS) {
+    if (_analysisResult == null) return;
+    setState(() {
+      _analysisWindowStartS = startS;
+      _analysisWindowEndS = endS;
+      final isFull = startS <= 0.5 && endS >= (_analysisResult!.totalDurationS - 0.5);
+      if (isFull) {
+        _windowStats = null;
+      } else {
+        _windowStats = WindowAnalysisService.computeSubWindow(_analysisResult!, startS, endS);
+      }
+    });
+  }
+
+  void _onResetAnalysisWindow() {
+    if (_analysisResult == null) return;
+    setState(() {
+      _analysisWindowStartS = 0.0;
+      _analysisWindowEndS = _analysisResult!.totalDurationS;
+      _windowStats = null;
+    });
   }
 
   void _onSeek(double newStartS) {
@@ -549,7 +581,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             const Tab(icon: Icon(Icons.scatter_plot, size: 18), text: 'HRV Dynamics & Poincaré'),
             Tab(
               icon: const Icon(Icons.table_chart, size: 18),
-              text: 'Clinical Summary (${_analysisResult?.summary.length ?? 28} Features)',
+              text: _windowStats != null
+                  ? 'Clinical Summary (${_windowStats!.summary.length} Features • Window)'
+                  : 'Clinical Summary (${_analysisResult?.summary.length ?? 28} Features)',
             ),
             const Tab(icon: Icon(Icons.dataset_outlined, size: 18), text: 'CSV Data Explorer'),
           ],
@@ -573,7 +607,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildKpiBar() {
     final res = _analysisResult!;
-    final summary = {for (final r in res.summary) r.metric: r};
+    final isWindowActive = _windowStats != null;
+    final rows = _windowStats?.summary ?? res.summary;
+    final summary = {for (final r in rows) r.metric: r};
+
+    final coverage = _windowStats?.coveragePct ?? res.coveragePct;
+    final beats = _windowStats?.detectedBeats ?? res.peaksIndices.length;
 
     final meanHr = summary['MeanHR']?.mean ?? double.nan;
     final sdnn = summary['SDNN']?.mean ?? double.nan;
@@ -585,9 +624,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final dateLabel = TimeFormatter.formatSessionDate(res.sessionStartDateTime);
     final spanLabel = TimeFormatter.formatSessionSpan(res.sessionStartDateTime, res.totalDurationS);
 
+    final windowStartLabel = TimeFormatter.formatSeconds(
+      _analysisWindowStartS ?? 0.0,
+      clockTime: _showClockTime,
+      sessionStart: res.sessionStartDateTime,
+      t0SecondsOfDay: res.startTimeOfDayS,
+      includeDate: false,
+    );
+    final windowEndLabel = TimeFormatter.formatSeconds(
+      _analysisWindowEndS ?? res.totalDurationS,
+      clockTime: _showClockTime,
+      sessionStart: res.sessionStartDateTime,
+      t0SecondsOfDay: res.startTimeOfDayS,
+      includeDate: false,
+    );
+    final winDurS = ((_analysisWindowEndS ?? res.totalDurationS) - (_analysisWindowStartS ?? 0.0)).clamp(0.0, res.totalDurationS);
+    final winDurHours = winDurS / 3600.0;
+    final winDurText = winDurHours >= 1.0 ? '${winDurHours.toStringAsFixed(1)}h' : '${(winDurS / 60.0).round()}m';
+
     final kpiWidgets = [
-      _kpiItem('Pulse Coverage', '${res.coveragePct.toStringAsFixed(1)}%', SensioTheme.goodPulse),
-      _kpiItem('Detected Beats', '${res.peaksIndices.length}', SensioTheme.accent),
+      _kpiItem(isWindowActive ? 'Window Coverage' : 'Pulse Coverage', '${coverage.toStringAsFixed(1)}%', SensioTheme.goodPulse),
+      _kpiItem(isWindowActive ? 'Window Beats' : 'Detected Beats', '$beats', SensioTheme.accent),
       _kpiItem('Mean HR', meanHr.isFinite ? '${meanHr.toStringAsFixed(1)} BPM' : '-', Colors.white),
       _kpiItem('Mean SDNN', sdnn.isFinite ? '${sdnn.toStringAsFixed(1)} ms' : '-', SensioTheme.ppgSignal),
       _kpiItem('Mean RMSSD', rmssd.isFinite ? '${rmssd.toStringAsFixed(1)} ms' : '-', SensioTheme.accent),
@@ -662,6 +719,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        if (isWindowActive) ...[
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: SensioTheme.accent.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: SensioTheme.accent.withValues(alpha: 0.6)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.filter_alt, size: 12, color: SensioTheme.accent),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Window: $windowStartLabel → $windowEndLabel ($winDurText)',
+                                  style: const TextStyle(color: SensioTheme.accent, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: _onResetAnalysisWindow,
+                                  child: const Icon(Icons.close, size: 12, color: Colors.white70),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
             ),
@@ -780,6 +864,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             showClockTime: _showClockTime,
             t0SecondsOfDay: t0,
             sessionStart: res.sessionStartDateTime,
+            analysisStartS: _analysisWindowStartS ?? 0.0,
+            analysisEndS: _analysisWindowEndS ?? res.totalDurationS,
+            onAnalysisWindowChanged: _onAnalysisWindowChanged,
+            onResetAnalysisWindow: _onResetAnalysisWindow,
           ),
           const SizedBox(height: 8),
 
@@ -803,6 +891,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildHrvDynamicsTab() {
     final res = _analysisResult!;
     final t0 = res.startTimeOfDayS > 0 ? res.startTimeOfDayS : (res.time.isNotEmpty ? res.time.first : 0.0);
+    final poincareData = _windowStats?.poincare ?? res.poincare;
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -816,7 +905,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Expanded(
                   flex: 5,
                   child: PoincareChart(
-                    data: res.poincare,
+                    data: poincareData,
                     onSelectBeatTimestamp: _onSelectBeatTimestamp,
                   ),
                 ),
@@ -841,7 +930,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   SizedBox(
                     height: 380,
                     child: PoincareChart(
-                      data: res.poincare,
+                      data: poincareData,
                       onSelectBeatTimestamp: _onSelectBeatTimestamp,
                     ),
                   ),
@@ -868,9 +957,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildSummaryTab() {
     final res = _analysisResult!;
+    final rows = _windowStats?.summary ?? res.summary;
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: SummaryTable(rows: res.summary),
+      child: SummaryTable(rows: rows),
     );
   }
 
