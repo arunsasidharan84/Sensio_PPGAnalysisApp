@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../../core/models/ppg_models.dart';
+import '../../core/utils/time_formatter.dart';
 
 class TimelineRibbon extends StatelessWidget {
   final List<ContinuousSegment> segments;
@@ -8,6 +9,9 @@ class TimelineRibbon extends StatelessWidget {
   final double currentStartS;
   final double windowDurationS;
   final ValueChanged<double> onSeek;
+  final bool showClockTime;
+  final double t0SecondsOfDay;
+  final DateTime? sessionStart;
 
   const TimelineRibbon({
     super.key,
@@ -16,80 +20,117 @@ class TimelineRibbon extends StatelessWidget {
     required this.currentStartS,
     required this.windowDurationS,
     required this.onSeek,
+    this.showClockTime = false,
+    this.t0SecondsOfDay = 0.0,
+    this.sessionStart,
   });
 
   @override
   Widget build(BuildContext context) {
     if (totalDurationS <= 0) return const SizedBox.shrink();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
+    final startLabel = TimeFormatter.formatSeconds(
+      0.0,
+      clockTime: showClockTime,
+      sessionStart: sessionStart,
+      t0SecondsOfDay: t0SecondsOfDay,
+      includeDate: showClockTime,
+    );
+    final endLabel = TimeFormatter.formatSeconds(
+      totalDurationS,
+      clockTime: showClockTime,
+      sessionStart: sessionStart,
+      t0SecondsOfDay: t0SecondsOfDay,
+      includeDate: showClockTime,
+    );
 
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (details) {
-            final tapX = details.localPosition.dx.clamp(0.0, width);
-            final targetS = (tapX / width) * totalDurationS;
-            onSeek(targetS.clamp(0.0, (totalDurationS - windowDurationS).clamp(0.0, totalDurationS)));
-          },
-          onHorizontalDragUpdate: (details) {
-            final tapX = details.localPosition.dx.clamp(0.0, width);
-            final targetS = (tapX / width) * totalDurationS;
-            onSeek(targetS.clamp(0.0, (totalDurationS - windowDurationS).clamp(0.0, totalDurationS)));
-          },
-          child: Container(
-            height: 36,
-            decoration: BoxDecoration(
-              color: SensioTheme.surface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: SensioTheme.border.withValues(alpha: 0.5)),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              children: [
-                // Render segments
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: segments.map((seg) {
-                    final fraction = (seg.durationS / totalDurationS).clamp(0.0, 1.0);
-                    Color segColor = SensioTheme.rejectNoise;
-                    if (seg.isGood) {
-                      segColor = SensioTheme.goodPulse;
-                    } else if (seg.description.toLowerCase().contains('dropout') ||
-                        seg.description.toLowerCase().contains('defect') ||
-                        seg.description.toLowerCase().contains('artifact')) {
-                      segColor = SensioTheme.badArtifact;
-                    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
 
-                    return Expanded(
-                      flex: (fraction * 10000).round().clamp(1, 10000),
-                      child: Container(
-                        color: segColor.withValues(alpha: 0.85),
-                      ),
-                    );
-                  }).toList(),
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) {
+                final tapX = details.localPosition.dx.clamp(0.0, width);
+                final targetS = (tapX / width) * totalDurationS;
+                onSeek(targetS.clamp(0.0, (totalDurationS - windowDurationS).clamp(0.0, totalDurationS)));
+              },
+              onHorizontalDragUpdate: (details) {
+                final tapX = details.localPosition.dx.clamp(0.0, width);
+                final targetS = (tapX / width) * totalDurationS;
+                onSeek(targetS.clamp(0.0, (totalDurationS - windowDurationS).clamp(0.0, totalDurationS)));
+              },
+              child: Container(
+                height: 32,
+                decoration: BoxDecoration(
+                  color: SensioTheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: SensioTheme.border.withValues(alpha: 0.5)),
                 ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    // Render segments
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: segments.map((seg) {
+                        final fraction = (seg.durationS / totalDurationS).clamp(0.0, 1.0);
+                        Color segColor = SensioTheme.rejectNoise;
+                        if (seg.isGood) {
+                          segColor = SensioTheme.goodPulse;
+                        } else if (seg.description.toLowerCase().contains('dropout') ||
+                            seg.description.toLowerCase().contains('defect') ||
+                            seg.description.toLowerCase().contains('artifact')) {
+                          segColor = SensioTheme.badArtifact;
+                        }
 
-                // Active window viewport indicator
-                Positioned(
-                  left: (currentStartS / totalDurationS) * width,
-                  width: ((windowDurationS / totalDurationS) * width).clamp(6.0, width),
-                  top: 0,
-                  bottom: 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 2),
-                      color: Colors.white.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(4),
+                        return Expanded(
+                          flex: (fraction * 10000).round().clamp(1, 10000),
+                          child: Container(
+                            color: segColor.withValues(alpha: 0.85),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                  ),
+
+                    // Active window viewport indicator
+                    Positioned(
+                      left: (currentStartS / totalDurationS) * width,
+                      width: ((windowDurationS / totalDurationS) * width).clamp(6.0, width),
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white, width: 2),
+                          color: Colors.white.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              startLabel,
+              style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'monospace'),
             ),
-          ),
-        );
-      },
+            Text(
+              endLabel,
+              style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'monospace'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

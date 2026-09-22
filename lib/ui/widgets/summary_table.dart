@@ -43,7 +43,7 @@ class _SummaryTableState extends State<SummaryTable> {
               // Domain Chips
               Wrap(
                 spacing: 6,
-                children: ['ALL', 'Time', 'Frequency', 'Non-Linear', 'Morphology'].map((d) {
+                children: ['ALL', 'Time', 'Frequency', 'Non-Linear', 'Morphology', 'Vitals & Activity'].map((d) {
                   final isSel = d == _filterDomain;
                   return ChoiceChip(
                     label: Text(d),
@@ -122,12 +122,15 @@ class _SummaryTableState extends State<SummaryTable> {
                       if (r.domain == 'Frequency') domainColor = SensioTheme.ppgSignal;
                       if (r.domain == 'Non-Linear') domainColor = const Color(0xFFFBBF24);
                       if (r.domain == 'Morphology') domainColor = const Color(0xFFF472B6);
+                      if (r.domain == 'Vitals & Activity') domainColor = const Color(0xFF38BDF8);
 
-                      final meanStr = r.mean.isFinite ? r.mean.toStringAsFixed(2) : '-';
-                      final sdStr = r.sd.isFinite ? '± ${r.sd.toStringAsFixed(2)}' : '';
-                      final medStr = r.median.isFinite ? r.median.toStringAsFixed(2) : '-';
-                      final minStr = r.minVal.isFinite ? r.minVal.toStringAsFixed(2) : '-';
-                      final maxStr = r.maxVal.isFinite ? r.maxVal.toStringAsFixed(2) : '-';
+                      final isTemp = r.metric == 'Skin_Temperature';
+                      final unit = isTemp ? ' °C' : '';
+                      final meanStr = r.mean.isFinite ? '${r.mean.toStringAsFixed(2)}$unit' : '-';
+                      final sdStr = r.sd.isFinite ? '± ${r.sd.toStringAsFixed(2)}$unit' : '';
+                      final medStr = r.median.isFinite ? '${r.median.toStringAsFixed(2)}$unit' : '-';
+                      final minStr = r.minVal.isFinite ? '${r.minVal.toStringAsFixed(2)}$unit' : '-';
+                      final maxStr = r.maxVal.isFinite ? '${r.maxVal.toStringAsFixed(2)}$unit' : '-';
 
                       return DataRow(
                         cells: [

@@ -179,6 +179,89 @@ pub fn load_sigmot_csv(path: &Path) -> Option<(Vec<f64>, Vec<f64>)> {
     }
 }
 
+/// Read timestamps and skin temperature values from a matching temperature CSV file
+pub fn load_temperature_csv(path: &Path) -> Option<(Vec<f64>, Vec<f64>)> {
+    let file = File::open(path).ok()?;
+    let reader = BufReader::new(file);
+
+    let mut seconds_list = Vec::new();
+    let mut values_list = Vec::new();
+    let mut in_data = false;
+
+    let mut prev_total_sec: Option<f64> = None;
+    let mut day_offset = 0.0;
+
+    for line_result in reader.lines() {
+        let line = match line_result {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let mut parts = trimmed.split(',');
+        let col0 = match parts.next() {
+            Some(c) => c.trim(),
+            None => continue,
+        };
+
+        if !in_data {
+            if col0.to_lowercase().starts_with("timestamp") {
+                in_data = true;
+            }
+            continue;
+        }
+
+        let col1 = match parts.next() {
+            Some(c) => c.trim(),
+            None => continue,
+        };
+
+        let raw_val: f64 = match col1.parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let mut ts_str = col0.to_string();
+        if ts_str.matches(':').count() == 3 {
+            if let Some(idx) = ts_str.rfind(':') {
+                ts_str.replace_range(idx..=idx, ".");
+            }
+        }
+
+        let time_obj = match NaiveTime::parse_from_str(&ts_str, "%H:%M:%S%.f") {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+
+        let sec_of_day = (time_obj.hour() as f64) * 3600.0
+            + (time_obj.minute() as f64) * 60.0
+            + (time_obj.second() as f64)
+            + (time_obj.nanosecond() as f64) / 1e9;
+
+        if let Some(prev) = prev_total_sec {
+            if sec_of_day < prev - 12.0 * 3600.0 {
+                day_offset += 86400.0;
+            }
+        }
+        prev_total_sec = Some(sec_of_day);
+
+        // Convert ADC centi-degrees to Celsius if needed (e.g. 3454 -> 34.54 °C)
+        let temp_c = if raw_val > 100.0 { raw_val / 100.0 } else { raw_val };
+
+        seconds_list.push(sec_of_day + day_offset);
+        values_list.push(temp_c);
+    }
+
+    if values_list.is_empty() {
+        None
+    } else {
+        Some((seconds_list, values_list))
+    }
+}
+
 /// Helper to convert Rust String into C string pointer
 fn to_c_string(s: String) -> *mut c_char {
     match CString::new(s) {
@@ -204,7 +287,7 @@ pub extern "C" fn sensio_get_version() -> *const c_char {
     VERSION.as_ptr() as *const c_char
 }
 
-/// Process a PPG CSV file with optional SigMot IMU file, returning JSON
+/// Process a PPG CSV file with optional SigMot IMU and Temperature files, returning JSON
 #[no_mangle]
 pub extern "C" fn sensio_process_file(
     ppg_path_ptr: *const c_char,
@@ -260,15 +343,51 @@ pub extern "C" fn sensio_process_file(
             (None, None)
         }
     } else {
-        (None, None)
+        // Auto-detect adjacent sigmot if null
+        let parent = ppg_path.parent();
+        let fname = ppg_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if let Some(p) = parent {
+            let cand = p.join(fname.replace("_ppg_data.csv", "_sigmot_data.csv"));
+            if cand.exists() {
+                match load_sigmot_csv(&cand) {
+                    Some((s, v)) => (Some(s), Some(v)),
+                    None => (None, None),
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        }
+    };
+
+    // Auto-detect adjacent temperature file
+    let (temp_sec, temp_val) = {
+        let parent = ppg_path.parent();
+        let fname = ppg_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if let Some(p) = parent {
+            let cand = p.join(fname.replace("_ppg_data.csv", "_temperature_data.csv"));
+            if cand.exists() {
+                match load_temperature_csv(&cand) {
+                    Some((s, v)) => (Some(s), Some(v)),
+                    None => (None, None),
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        }
     };
 
     let fs = if sample_rate > 0.0 { sample_rate } else { 50.0 };
 
     let sig_sec_ref = sig_sec.as_deref();
     let sig_val_ref = sig_val.as_deref();
+    let temp_sec_ref = temp_sec.as_deref();
+    let temp_val_ref = temp_val.as_deref();
 
-    match analyze_session(&raw_sec, &raw_val, fs, sig_sec_ref, sig_val_ref) {
+    match analyze_session(&raw_sec, &raw_val, fs, sig_sec_ref, sig_val_ref, temp_sec_ref, temp_val_ref) {
         Ok(result) => {
             let resp = FfiResponse {
                 success: true,

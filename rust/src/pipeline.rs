@@ -58,6 +58,7 @@ pub struct ContinuousSegment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionAnalysisResult {
     pub total_duration_s: f64,
+    pub start_time_of_day_s: f64,
     pub sample_rate: f64,
     pub coverage_pct: f64,
     pub accepted_window_count: usize,
@@ -589,6 +590,8 @@ pub fn analyze_session(
     target_fs: f64,
     sigmot_seconds: Option<&[f64]>,
     sigmot_values: Option<&[f64]>,
+    temp_seconds: Option<&[f64]>,
+    temp_values: Option<&[f64]>,
 ) -> Result<SessionAnalysisResult, String> {
     let prep = preprocess_ppg(
         raw_seconds,
@@ -625,7 +628,7 @@ pub fn analyze_session(
         vec![0.0; prep.time.len()]
     };
 
-    let hrv = compute_time_resolved_hrv(
+    let mut hrv = compute_time_resolved_hrv(
         &time_rel,
         &prep.filtered,
         &peaks_indices,
@@ -634,6 +637,19 @@ pub fn analyze_session(
         15.0,
         Some(&valid_mask),
     );
+
+    // Interpolate Skin Temperature & Activity Motion onto HRV timeline
+    if let (Some(sec), Some(val)) = (temp_seconds, temp_values) {
+        let hrv_time_abs: Vec<f64> = hrv.timestamps.iter().map(|&t| t + t0).collect();
+        let temp_metric = interp_1d(&hrv_time_abs, sec, val);
+        hrv.metrics.insert("Skin_Temperature".to_string(), temp_metric);
+    }
+
+    if let (Some(sec), Some(val)) = (sigmot_seconds, sigmot_values) {
+        let hrv_time_abs: Vec<f64> = hrv.timestamps.iter().map(|&t| t + t0).collect();
+        let sigmot_metric = interp_1d(&hrv_time_abs, sec, val);
+        hrv.metrics.insert("Activity_Motion".to_string(), sigmot_metric);
+    }
 
     let mut peak_times = Vec::with_capacity(peaks_indices.len());
     for &p in &peaks_indices {
@@ -654,6 +670,7 @@ pub fn analyze_session(
 
     Ok(SessionAnalysisResult {
         total_duration_s,
+        start_time_of_day_s: t0,
         sample_rate: target_fs,
         coverage_pct: (prep.coverage * 100.0 * 100.0).round() / 100.0,
         accepted_window_count: accepted_count,

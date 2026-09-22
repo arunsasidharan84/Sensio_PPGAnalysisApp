@@ -773,6 +773,8 @@ pub fn generate_feature_summary(metrics: &HashMap<String, Vec<f64>>) -> Vec<Feat
         ("APG_e_a_Ratio", "Morphology"),
         ("Morph_Pulse_Amp", "Morphology"),
         ("Morph_SD_Time_Ratio", "Morphology"),
+        ("Skin_Temperature", "Vitals & Activity"),
+        ("Activity_Motion", "Vitals & Activity"),
     ]
     .iter()
     .cloned()

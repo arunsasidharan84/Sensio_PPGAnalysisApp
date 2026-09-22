@@ -148,9 +148,10 @@ class FeatureSummaryRow {
   }
 }
 
-/// Full session analysis output from Rust core
 class SessionAnalysisResult {
   final double totalDurationS;
+  final double startTimeOfDayS;
+  final DateTime? sessionStartDateTime;
   final double sampleRate;
   final double coveragePct;
   final int acceptedWindowCount;
@@ -170,6 +171,8 @@ class SessionAnalysisResult {
 
   SessionAnalysisResult({
     required this.totalDurationS,
+    this.startTimeOfDayS = 0.0,
+    this.sessionStartDateTime,
     required this.sampleRate,
     required this.coveragePct,
     required this.acceptedWindowCount,
@@ -188,11 +191,42 @@ class SessionAnalysisResult {
     required this.summary,
   });
 
+  SessionAnalysisResult copyWith({
+    DateTime? sessionStartDateTime,
+    double? startTimeOfDayS,
+  }) {
+    return SessionAnalysisResult(
+      totalDurationS: totalDurationS,
+      startTimeOfDayS: startTimeOfDayS ?? this.startTimeOfDayS,
+      sessionStartDateTime: sessionStartDateTime ?? this.sessionStartDateTime,
+      sampleRate: sampleRate,
+      coveragePct: coveragePct,
+      acceptedWindowCount: acceptedWindowCount,
+      totalWindowCount: totalWindowCount,
+      time: time,
+      normPpg: normPpg,
+      filtered: filtered,
+      usableMask: usableMask,
+      pulseMask: pulseMask,
+      qualityTrace: qualityTrace,
+      sigmotTrace: sigmotTrace,
+      peaksIndices: peaksIndices,
+      gaplessSegments: gaplessSegments,
+      hrv: hrv,
+      poincare: poincare,
+      summary: summary,
+    );
+  }
+
   List<ContinuousSegment> get segments => gaplessSegments;
 
   factory SessionAnalysisResult.fromJson(Map<String, dynamic> json) {
     return SessionAnalysisResult(
       totalDurationS: (json['total_duration_s'] as num?)?.toDouble() ?? 0.0,
+      startTimeOfDayS: (json['start_time_of_day_s'] as num?)?.toDouble() ?? 0.0,
+      sessionStartDateTime: json['start_datetime_iso'] != null
+          ? DateTime.tryParse(json['start_datetime_iso'] as String)
+          : null,
       sampleRate: (json['sample_rate'] as num?)?.toDouble() ?? 50.0,
       coveragePct: (json['coverage_pct'] as num?)?.toDouble() ?? 0.0,
       acceptedWindowCount: json['accepted_window_count'] as int? ?? 0,

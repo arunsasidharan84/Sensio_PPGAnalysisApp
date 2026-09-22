@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use sensio_ppg_core::ffi::{load_ring_ppg_csv, load_sigmot_csv};
+use sensio_ppg_core::ffi::{load_ring_ppg_csv, load_sigmot_csv, load_temperature_csv};
 use sensio_ppg_core::pipeline::analyze_session;
 
 fn main() {
@@ -109,6 +109,31 @@ fn main() {
         (None, None)
     };
 
+    let temp_path = if let Some(parent) = ppg_path.parent() {
+        if let Some(fname) = ppg_path.file_name().and_then(|f| f.to_str()) {
+            let cand = parent.join(fname.replace("_ppg_data.csv", "_temperature_data.csv"));
+            if cand.exists() {
+                Some(cand)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let (temp_sec, temp_val) = if let Some(ref t_path) = temp_path {
+        println!("Loading Temperature file: {}", t_path.display());
+        match load_temperature_csv(t_path) {
+            Some((s, v)) => (Some(s), Some(v)),
+            None => (None, None),
+        }
+    } else {
+        (None, None)
+    };
+
     println!(
         "Raw samples: {} | Duration: {:.1} s | Target Fs: {:.1} Hz",
         raw_val.len(),
@@ -118,8 +143,10 @@ fn main() {
 
     let sig_sec_ref = sig_sec.as_deref();
     let sig_val_ref = sig_val.as_deref();
+    let temp_sec_ref = temp_sec.as_deref();
+    let temp_val_ref = temp_val.as_deref();
 
-    let res = match analyze_session(&raw_sec, &raw_val, sample_rate, sig_sec_ref, sig_val_ref) {
+    let res = match analyze_session(&raw_sec, &raw_val, sample_rate, sig_sec_ref, sig_val_ref, temp_sec_ref, temp_val_ref) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Analysis error: {}", e);
