@@ -47,3 +47,5 @@ app.*.map.json
 # Native and distribution artifacts
 dist/
 rust/target/
+ios/Frameworks/
+macos/Frameworks/
