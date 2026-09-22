@@ -215,7 +215,7 @@ jobs:
         if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_firebase == 'true') || startsWith(github.ref, 'refs/tags/v') }}
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID_ANDROID || '1:625498974111:android:fed65512ede01911c47faa' }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID_ANDROID || '1:625498974111:android:0404b3c6e15ce5afc47faa' }}
         run: |
           if [ -n "$FIREBASE_TOKEN" ]; then
             npx firebase-tools appdistribution:distribute build/app/outputs/flutter-apk/app-release.apk \

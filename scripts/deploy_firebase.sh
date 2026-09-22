@@ -6,7 +6,7 @@ cd "$PROJECT_DIR"
 
 FIREBASE_PROJECT="${1:-"ccs-ppg-studio"}"
 NOTES="${2:-"CCS PPGStudio Release: Interactive Gapless Analysis Window, 28-feature clinical dictionary, and research-grade CSV exports."}"
-APP_ID="${FIREBASE_APP_ID:-"1:625498974111:android:fed65512ede01911c47faa"}"
+APP_ID="${FIREBASE_APP_ID:-"1:625498974111:android:0404b3c6e15ce5afc47faa"}"
 
 echo "=================================================="
 echo "🔥 Deploying to Firebase App Distribution"
